@@ -12,7 +12,7 @@ from experiment_classifier import ClsModel
 from torchvision.utils import save_image
 
 # Set device
-device = 'cuda:3'
+device = 'cuda:0'
 
 # Load main model
 conf = ffhq128_autoenc_130M()
