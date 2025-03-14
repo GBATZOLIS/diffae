@@ -49,4 +49,10 @@ ax = ax.flatten()
 
 for i in range(len(imgs)):
     ax[i].imshow(imgs[i].cpu().permute([1, 2, 0]))
-    ax[i].axis('off') 
+    ax[i].axis('off')  # Remove axis for cleaner visualization
+
+# ✅ Save the figure
+plt.savefig(output_path, dpi=300, bbox_inches='tight')
+plt.close()
+
+print(f"Generated samples saved at: {output_path}")
