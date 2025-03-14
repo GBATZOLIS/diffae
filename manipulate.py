@@ -39,7 +39,7 @@ cls_model.to(device)
 # Load dataset and encode image
 data = ImageDataset('imgs_align', image_size=conf.img_size, exts=['jpg', 'JPG', 'png'], do_augment=False)
 print(data)
-batch = data[1]['img'][None]
+batch = data[0]['img'][None]
 cond = model.encode(batch.to(device))
 xT = model.encode_stochastic(batch.to(device), cond, T=250)
 
