@@ -237,11 +237,11 @@ def riemannian_optimization(riem_config_path):
     state = torch.load(ckpt_path, map_location="cpu")
     model.load_state_dict(state["state_dict"], strict=False)
     model.ema_model.eval()
-    model.to(device)
+    model.ema_model.to(device)
 
-    if not hasattr(model, "latent_net"):
+    if not hasattr(model.ema_model, "latent_net"):
         raise ValueError("Autoencoder model does not contain latent_net.")
-    model.latent_net.to(device)
+    #model.latent_net.to(device)
 
     # --- Load the classifier config & model from templates_cls.py ---
     print("Loading classifier model from templates_cls.py ...")
@@ -285,8 +285,8 @@ def riemannian_optimization(riem_config_path):
         print("Could not compute latent SNR:", e)
 
     # --- Build score and denoiser functions ---
-    score_fn = get_score_fn(latent_wrapper, model.latent_net, t_latent, latent_shape)
-    denoiser_fn = get_denoiser_fn(latent_wrapper, model.latent_net, t_latent, latent_shape)
+    score_fn = get_score_fn(latent_wrapper, model.ema_model.latent_net, t_latent, latent_shape)
+    denoiser_fn = get_denoiser_fn(latent_wrapper, model.ema_model.latent_net, t_latent, latent_shape)
     retraction_fn = create_retraction_fn(
         retraction_type=riem_config.get("retraction_operator", "identity"),
         denoiser_fn=denoiser_fn
