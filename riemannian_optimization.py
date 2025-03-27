@@ -121,7 +121,7 @@ def get_score_fn(diffusion_wrapper, latent_net, t, latent_shape):
         t_corr = ensure_time_tensor(t, batch_size)
         sigma_t = sigma_fn(t_corr).view(batch_size, 1)
         z = unflatten_tensor(z_flat, latent_shape)
-        noise_pred = latent_net(z, None, t_corr)
+        noise_pred = latent_net(z, t_corr).pred
         noise_pred_flat = flatten_tensor(noise_pred)
         return - noise_pred_flat / sigma_t
     return score_fn
@@ -138,7 +138,7 @@ def get_denoiser_fn(diffusion_wrapper, latent_net, t, latent_shape):
         sigma_t = sigma_fn(t_corr).view(batch_size, 1)
         alpha_t = alpha_fn(t_corr).view(batch_size, 1)
         z = unflatten_tensor(z_flat, latent_shape)
-        noise_pred = latent_net(z, None, t_corr)
+        noise_pred = latent_net(z, t_corr).pred
         noise_pred_flat = flatten_tensor(noise_pred)
         return (z_flat - sigma_t * noise_pred_flat) / alpha_t
     return denoiser_fn
@@ -191,7 +191,16 @@ def compute_discrete_time_from_target_snr(riem_config, autoenc_conf):
     # Build the latent diffusion process to access its discrete schedule.
     latent_diffusion = autoenc_conf.make_latent_eval_diffusion_conf().make_sampler()
     alphas_cumprod = latent_diffusion.alphas_cumprod  # assumed to be a numpy array
-        
+    
+    # Print SNR for the first 10 diffusion time steps
+    print("\n--- SNR for first 10 diffusion time steps ---")
+    for t in range(15):
+        alpha = alphas_cumprod[t]
+        sigma_squared = 1.0 - alpha
+        snr = alpha / sigma_squared
+        print(f"Step {t:2d}: alpha_cumprod = {alpha:.6f}, SNR = {snr:.6f}")
+    print("---------------------------------------------\n")
+
     # Find the index t for which alphas_cumprod is closest to desired_alpha.
     diffs = np.abs(alphas_cumprod - desired_alpha)
     best_t = int(np.argmin(diffs))
@@ -226,11 +235,14 @@ def riemannian_optimization(riem_config_path):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # --- Load the riemannian config ---
+    riem_config = load_riemannian_config(riem_config_path)
+
     # --- Load the autoencoder config w/ latent diffusion ---
     print("Loading autoencoder model (latent config) from templates_latent.py ...")
     autoenc_conf = ffhq128_autoenc_latent()
-    autoenc_conf.T_eval = 100
-    autoenc_conf.latent_T_eval = 100
+    autoenc_conf.T_eval = 1000
+    autoenc_conf.latent_T_eval = 1000
     model = LitModel(autoenc_conf)
     ckpt_path = os.path.join("checkpoints", autoenc_conf.name, "last.ckpt")
     print(f"Loading autoencoder checkpoint from {ckpt_path}")
@@ -267,9 +279,8 @@ def riemannian_optimization(riem_config_path):
     xT = model.encode_stochastic(batch, cond, T=250)
     latent_shape = cond.shape[1:]
     x0_flat = flatten_tensor(cond) #this is the latent that we will optimize
+    riem_config["initial_point"] = x0_flat
 
-    # --- Load the riemannian config ---
-    riem_config = load_riemannian_config(riem_config_path)
     t_val = compute_discrete_time_from_target_snr(riem_config, autoenc_conf)
     batch_size = x0_flat.size(0)
     t_latent = torch.full((batch_size,), t_val, dtype=torch.float32, device=device)
