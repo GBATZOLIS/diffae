@@ -5,7 +5,7 @@ CONFIG = {
     # Riemannian optimization parameters
     "ro_SNR": 10, #SNR at which Riemannian optimization takes place
     "reg_lambda": 5e-4,
-    "riemannian_steps": 18,
+    "riemannian_steps": 2,
     "riemannian_lr_init": 1e-2,
     
     # Optimizer selection:

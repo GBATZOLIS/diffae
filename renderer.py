@@ -48,6 +48,7 @@ def render_condition(
     x_start=None,
     cond=None,
 ):
+    print(conf.train_mode)
     if conf.train_mode == TrainMode.diffusion:
         assert conf.model_type.has_autoenc()
         # returns {'cond', 'cond2'}
