@@ -123,7 +123,7 @@ def riemannian_optimization(riem_config_path):
     manipulated_img = (manipulated_img + 1) / 2.0
 
     # Save results
-    output_dir = "ro_results"
+    output_dir = "ro_optimization/ro_results"
     os.makedirs(output_dir, exist_ok=True)
     original_img = model.render(xT, cond, T=T_render)
     original_img = (original_img + 1) / 2.0
