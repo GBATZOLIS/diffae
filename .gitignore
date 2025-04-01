@@ -13,5 +13,6 @@ datasets/celeba
 checkpoints
 results
 ro_results
+ro_optimization/ro_results
 
 .ipynb_checkpoints/
