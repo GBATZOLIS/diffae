@@ -74,10 +74,17 @@ def riemannian_optimization(riem_config_path):
     xT = model.encode_stochastic(batch, cond, T=250)
     latent_shape = cond.shape[1:]
     x0_flat = flatten_tensor(cond)
-    riem_config["initial_point"] = x0_flat
+
+    # Check that both models expect normalized latents.
+    assert getattr(cls_model.conf, "manipulate_znormalize", False) == True and getattr(model.conf, "latent_znormalize", False) == True, \
+        f"cls_model.conf.manipulate_znormalize:{cls_model.conf.manipulate_znormalize} and model.conf.latent_znormalize:{model.conf.latent_znormalize}. Both must be True."
+
+    # Normalize the latent before optimization.
+    x0_flat_normalized = cls_model.normalize(x0_flat)
+    riem_config["initial_point"] = x0_flat_normalized
 
     t_val = compute_discrete_time_from_target_snr(riem_config, autoenc_conf)
-    batch_size = x0_flat.size(0)
+    batch_size = x0_flat_normalized.size(0)
     t_latent = torch.full((batch_size,), t_val, dtype=torch.float32, device=device)
 
     # Build latent diffusion process & wrapper
@@ -102,8 +109,8 @@ def riemannian_optimization(riem_config_path):
     target_class = "Wavy_Hair"
     cls_id = CelebAttrDataset.cls_to_id[target_class]
     print(f"Target class '{target_class}' has id {cls_id}")
-    l2_lambda = riem_config.get("l2_lambda", 0.2)
-    opt_fn = get_opt_fn(cls_model, cls_id, latent_shape, x0_flat, l2_lambda)
+    l2_lambda = riem_config.get("l2_lambda", 0.1)
+    opt_fn = get_opt_fn(cls_model, cls_id, latent_shape, x0_flat_normalized, l2_lambda)
 
     # Run the riemannian optimizer
     print("Running riemannian optimization ...")
@@ -113,13 +120,14 @@ def riemannian_optimization(riem_config_path):
     elapsed_time = time.time() - start_time
     print(f"Riemannian optimization completed in {elapsed_time:.2f} seconds.")
 
-    # Get optimized latent and render manipulated image
-    x_opt_flat = trajectory[-1]
-    x_opt = unflatten_tensor(x_opt_flat, latent_shape)
-    print("Optimized latent obtained.")
+    # Denormalize each latent in the trajectory (using a for loop)
+    denorm_trajectory = [cls_model.denormalize(latent) for latent in trajectory]
 
+    # Use the last denormalized latent for final rendering.
+    print("Optimized latent obtained.")
+    x_opt_denormalized = unflatten_tensor(denorm_trajectory[-1], latent_shape)
     T_render = riem_config.get("T_render", 100)
-    manipulated_img = model.render(xT, x_opt, T=T_render)
+    manipulated_img = model.render(xT, x_opt_denormalized, T=T_render)
     manipulated_img = (manipulated_img + 1) / 2.0
 
     # Save results
@@ -140,9 +148,9 @@ def riemannian_optimization(riem_config_path):
     plt.close()
     print(f"Comparison image saved to {comp_path}")
 
-    # Visualize the optimization trajectory
+    # Visualize the optimization trajectory using the pre-denormalized latents.
     traj_save_path = os.path.join(output_dir, "trajectory.png")
-    visualize_trajectory(model, xT, trajectory, latent_shape, T_render, traj_save_path, fast_mode=False)
+    visualize_trajectory(model, xT, denorm_trajectory, latent_shape, T_render, traj_save_path, fast_mode=False)
 
 def main():
     mp.set_start_method("spawn", force=True)

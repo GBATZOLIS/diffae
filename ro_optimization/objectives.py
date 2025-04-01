@@ -7,11 +7,7 @@ def classifier_objective(x_flat, cls_model, cls_id, latent_shape):
     Computes the negative logit for the target class to maximize classifier output.
     """
     x = unflatten_tensor(x_flat, latent_shape)
-    if getattr(cls_model.conf, "manipulate_znormalize", False):
-        x_in = cls_model.normalize(x)
-    else:
-        x_in = x
-    logits = cls_model.classifier(x_in)
+    logits = cls_model.classifier(x)
     return -logits[:, cls_id]
 
 def get_opt_fn(cls_model, cls_id, latent_shape, x0_flat, l2_lambda=0.1):
