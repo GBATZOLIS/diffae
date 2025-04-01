@@ -29,13 +29,13 @@ import matplotlib.pyplot as plt
 # Import your code's modules
 # ---------------------------
 # The user indicates there's no config folder, but we do have templates, templates_latent, templates_cls.
-from ..templates_latent import ffhq128_autoenc_latent   # the autoencoder config w/ latent diffusion
-from ..templates_cls import ffhq128_autoenc_cls         # the classifier config
+from templates_latent import ffhq128_autoenc_latent   # the autoencoder config w/ latent diffusion
+from templates_cls import ffhq128_autoenc_cls         # the classifier config
 # The main experiment & classifier code
-from ..experiment import LitModel
-from ..experiment_classifier import ClsModel
+from experiment import LitModel
+from experiment_classifier import ClsModel
 # The dataset code
-from ..dataset import ImageDataset, CelebAttrDataset
+from dataset import ImageDataset, CelebAttrDataset
 
 # Riemannian optimization & geometry library
 from data_geometry.optim_function import get_optim_function
