@@ -162,6 +162,30 @@ def classifier_objective(x_flat, cls_model, cls_id, latent_shape):
     logits = cls_model.classifier(x_in)
     return -logits[:, cls_id]
 
+def get_opt_fn(cls_model, cls_id, latent_shape, x0_flat, l2_lambda=0.1):
+    """
+    Returns an optimization objective function that:
+      - Maximizes the classifier output for a given class (minimizes its negative),
+      - Encourages staying close to the original latent via L2 regularization.
+
+    Args:
+        cls_model: The classifier model.
+        cls_id: The target class ID to maximize.
+        latent_shape: Shape of the latent tensor (excluding batch dim).
+        x0_flat: The original latent (flattened).
+        l2_lambda: Weight of the L2 regularization term.
+
+    Returns:
+        opt_fn(x_flat): A callable that computes the total objective.
+    """
+    def opt_fn(x_flat):
+        cls_loss = classifier_objective(x_flat, cls_model, cls_id, latent_shape)
+        l2_loss = F.mse_loss(x_flat, x0_flat, reduction='none').sum(dim=1)
+        return cls_loss + l2_lambda * l2_loss
+    
+    return opt_fn
+
+
 def compute_discrete_time_from_target_snr(riem_config, autoenc_conf):
     """
     Computes the discrete diffusion time index from a target SNR value provided in the riemannian config.
@@ -227,6 +251,74 @@ def load_riemannian_config(path):
     if "CONFIG" not in config_dict:
         raise ValueError(f"No 'CONFIG' dictionary found in {path}")
     return config_dict["CONFIG"]
+
+def visualize_trajectory(model, xT, trajectory, latent_shape, T_render, save_path, fast_mode=False):
+    """
+    Visualizes the optimization trajectory.
+
+    For each latent in the trajectory, renders an image using model.render(xT, latent, T=T_render).
+    Arranges the images in a grid: each row corresponds to one example in the batch,
+    and each column corresponds to one trajectory step (with the original on the left and final manipulated on the right).
+
+    Args:
+        model: The LitModel instance used for rendering.
+        xT: The stochastic latent sample used for rendering (tensor of shape (B, C, H, W)).
+        trajectory: A list of flattened latent vectors (one per optimization step).
+        latent_shape: The shape of the latent (excluding the batch dimension).
+        T_render: The T value used in model.render.
+        save_path: File path where the figure is saved.
+        fast_mode: If True, renders all trajectory images in a single batched call.
+    """
+    n_steps = len(trajectory)
+    batch_size = trajectory[0].size(0)  # assuming all trajectory points have the same batch size
+    rendered_images = []  # list of length n_steps, each element is a (B, H, W, C) numpy array
+
+    if not fast_mode:
+        # Render each trajectory step individually.
+        for step in range(n_steps):
+            latent_flat = trajectory[step]
+            latent_unflat = unflatten_tensor(latent_flat, latent_shape)
+            imgs = model.render(xT, latent_unflat, T=T_render)
+            imgs = (imgs + 1) / 2.0  # normalize to [0, 1]
+            # Convert from (B, C, H, W) to (B, H, W, C)
+            imgs_np = imgs.cpu().permute(0, 2, 3, 1).numpy()
+            rendered_images.append(imgs_np)
+    else:
+        # Fast mode: batch all latent steps together.
+        # Unflatten and concatenate all latent steps along the batch dimension.
+        all_latents = torch.cat([unflatten_tensor(latent, latent_shape) for latent in trajectory], dim=0)
+        # Repeat xT for each trajectory step.
+        xT_repeated = xT.repeat(n_steps, 1, 1, 1)
+        imgs = model.render(xT_repeated, all_latents, T=T_render)
+        imgs = (imgs + 1) / 2.0  # normalize to [0, 1]
+        # Reshape: from (n_steps*B, C, H, W) to (n_steps, B, C, H, W)
+        imgs = imgs.view(n_steps, batch_size, *imgs.shape[1:])
+        # Permute to (n_steps, B, H, W, C)
+        imgs = imgs.permute(0, 1, 3, 4, 2).cpu().numpy()
+        # Split into list per trajectory step.
+        for step in range(n_steps):
+            rendered_images.append(imgs[step])
+    
+    # Create a grid: rows = batch_size, columns = n_steps.
+    fig, axes = plt.subplots(batch_size, n_steps, figsize=(n_steps * 3, batch_size * 3))
+    # Ensure axes is a 2D array.
+    if batch_size == 1 and n_steps == 1:
+        axes = np.array([[axes]])
+    elif batch_size == 1:
+        axes = np.expand_dims(axes, axis=0)
+    elif n_steps == 1:
+        axes = np.expand_dims(axes, axis=1)
+    
+    for i in range(batch_size):
+        for j in range(n_steps):
+            ax = axes[i, j]
+            ax.imshow(rendered_images[j][i])
+            ax.axis('off')
+            if i == 0:
+                ax.set_title(f"Step {j}")
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
 
 # ---------------------------
 # Main Riemannian Optimization Routine
@@ -308,8 +400,9 @@ def riemannian_optimization(riem_config_path):
     cls_id = CelebAttrDataset.cls_to_id[target_class]
     print(f"Target class '{target_class}' has id {cls_id}")
 
-    def opt_fn(x_flat):
-        return classifier_objective(x_flat, cls_model, cls_id, latent_shape)
+    # Get the combined classifier + proximity objective
+    l2_lambda = riem_config.get("l2_lambda", 0.2)# Retrieve lambda for L2 penalty from config (or default to 0.1)
+    opt_fn = get_opt_fn(cls_model, cls_id, latent_shape, x0_flat, l2_lambda)
 
     # --- Run the riemannian optimizer ---
     print("Running riemannian optimization on the latent space...")
@@ -330,7 +423,7 @@ def riemannian_optimization(riem_config_path):
     manipulated_img = (manipulated_img + 1) / 2.0
 
     # --- Save results ---
-    output_dir = "riem_results"
+    output_dir = "ro_results"
     os.makedirs(output_dir, exist_ok=True)
     original_img = model.render(xT, cond, T=T_render)
     original_img = (original_img + 1) / 2.0
@@ -347,6 +440,11 @@ def riemannian_optimization(riem_config_path):
     plt.close()
     print(f"Comparison image saved to {comp_path}")
 
+    # --- Visualize the optimization trajectory ---
+    traj_save_path = os.path.join(output_dir, "trajectory.png")
+    # Set fast_mode to False for individual rendering; set to True to use batched rendering.
+    visualize_trajectory(model, xT, trajectory, latent_shape, T_render, traj_save_path, fast_mode=False)
+    
     # --- Visualize the optimization trajectory (optional) ---
     '''
     visualize_riemannian_optimization_selector(

@@ -49,7 +49,7 @@ def render_condition(
     cond=None,
 ):
     print(conf.train_mode)
-    if conf.train_mode == TrainMode.diffusion:
+    if conf.train_mode in [TrainMode.diffusion,TrainMode.latent_diffusion] :
         assert conf.model_type.has_autoenc()
         # returns {'cond', 'cond2'}
         if cond is None:

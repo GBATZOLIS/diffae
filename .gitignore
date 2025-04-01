@@ -12,5 +12,6 @@ datasets/celeba.lmdb
 datasets/celeba
 checkpoints
 results
+ro_results
 
 .ipynb_checkpoints/
