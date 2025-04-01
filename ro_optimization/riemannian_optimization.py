@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-riemannian_optimization.py
+ro_optimization/riemannian_optimization.py
 
 Performs riemannian optimization in the latent space of an autoencoder/diffusion decoder
 (loaded via ffhq128_autoenc_latent) to increase the classifier output for a target attribute
@@ -29,13 +29,13 @@ import matplotlib.pyplot as plt
 # Import your code's modules
 # ---------------------------
 # The user indicates there's no config folder, but we do have templates, templates_latent, templates_cls.
-from templates_latent import ffhq128_autoenc_latent   # the autoencoder config w/ latent diffusion
-from templates_cls import ffhq128_autoenc_cls         # the classifier config
+from ..templates_latent import ffhq128_autoenc_latent   # the autoencoder config w/ latent diffusion
+from ..templates_cls import ffhq128_autoenc_cls         # the classifier config
 # The main experiment & classifier code
-from experiment import LitModel
-from experiment_classifier import ClsModel
+from ..experiment import LitModel
+from ..experiment_classifier import ClsModel
 # The dataset code
-from dataset import ImageDataset, CelebAttrDataset
+from ..dataset import ImageDataset, CelebAttrDataset
 
 # Riemannian optimization & geometry library
 from data_geometry.optim_function import get_optim_function
@@ -399,7 +399,6 @@ def riemannian_optimization(riem_config_path):
     target_class = "Wavy_Hair"
     cls_id = CelebAttrDataset.cls_to_id[target_class]
     print(f"Target class '{target_class}' has id {cls_id}")
-
     # Get the combined classifier + proximity objective
     l2_lambda = riem_config.get("l2_lambda", 0.2)# Retrieve lambda for L2 penalty from config (or default to 0.1)
     opt_fn = get_opt_fn(cls_model, cls_id, latent_shape, x0_flat, l2_lambda)

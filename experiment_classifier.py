@@ -72,7 +72,7 @@ class ClsModel(pl.LightningModule):
 
         # classifier
         if conf.train_mode == TrainMode.manipulate:
-            # latent manipluation requires only a linear classifier
+            # latent manipulation requires only a linear classifier
             self.classifier = nn.Linear(conf.style_ch, num_cls)
         else:
             raise NotImplementedError()
