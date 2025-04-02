@@ -10,6 +10,7 @@ import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import *
 import torch
+import torch.nn as nn
 
 
 class ZipLoader:
@@ -22,6 +23,28 @@ class ZipLoader:
     def __iter__(self):
         for each in zip(*self.loaders):
             yield each
+
+class NonLinearClassifier(nn.Module):
+    """
+    A robust non-linear classifier built as a small MLP without using batch normalization.
+    It uses two hidden layers with LayerNorm, ReLU activations, and dropout.
+    """
+    def __init__(self, in_features, num_classes, hidden_dims=[256, 128], dropout=0.25):
+        super().__init__()
+        self.model = nn.Sequential(
+            nn.Linear(in_features, hidden_dims[0]),
+            nn.LayerNorm(hidden_dims[0]),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dims[0], hidden_dims[1]),
+            nn.LayerNorm(hidden_dims[1]),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dims[1], num_classes)
+        )
+
+    def forward(self, x):
+        return self.model(x)
 
 
 class ClsModel(pl.LightningModule):
@@ -72,8 +95,20 @@ class ClsModel(pl.LightningModule):
 
         # classifier
         if conf.train_mode == TrainMode.manipulate:
-            # latent manipulation requires only a linear classifier
-            self.classifier = nn.Linear(conf.style_ch, num_cls)
+            # Choose the classifier based on conf.classifier_type.
+            classifier_type = getattr(conf, 'classifier_type', 'linear')
+            if classifier_type == 'linear':
+                self.classifier = nn.Linear(conf.style_ch, num_cls)
+            elif classifier_type == 'nonlinear':
+                # Use extra config values for hidden dimensions and dropout.
+                hidden_dims = getattr(conf, 'non_linear_hidden_dims', [256, 128])
+                dropout = getattr(conf, 'non_linear_dropout', 0.25)
+                self.classifier = NonLinearClassifier(conf.style_ch, num_cls,
+                                                    hidden_dims=hidden_dims,
+                                                    dropout=dropout)
+            else:
+                raise ValueError(f"Unknown classifier_type: {classifier_type}")
+        
         else:
             raise NotImplementedError()
 
