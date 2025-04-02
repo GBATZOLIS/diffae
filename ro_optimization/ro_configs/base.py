@@ -5,8 +5,8 @@ CONFIG = {
     # Riemannian optimization parameters
     "ro_SNR": 50, #SNR at which Riemannian optimization takes place
     "reg_lambda": 1e-5,
-    "riemannian_steps": 7,
-    "riemannian_lr_init": 1e-4,
+    "riemannian_steps": 5,
+    "riemannian_lr_init": 5e-3,
     
     # Optimizer selection:
     "optimizer_type": "gradient_descent",  # Choices:["gradient_descent", "trust_region"]
@@ -22,7 +22,7 @@ CONFIG = {
     "line_search": "strong_wolfe",
     "wolfe_c1": 1e-4,
     "wolfe_c2": 0.7,
-    "max_bracket": 15,
+    "max_bracket": 11,
     "max_zoom": 10,
     "max_alpha": 300,
     "armijo_rho": 1e-6,
@@ -37,9 +37,9 @@ CONFIG = {
 
     # Settings for fast calculation of Riemannian gradient via CG
     "cg_preconditioner": 'diagonal',
-    "cg_precond_diag_samples": 50, 
+    "cg_precond_diag_samples": 10, 
     "cg_tol": 1e-6, 
-    "cg_max_iter": 50,
+    "cg_max_iter": 20,
 
     # Logging
     "log_dir": "logs",

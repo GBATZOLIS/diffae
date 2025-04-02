@@ -106,10 +106,10 @@ def riemannian_optimization(riem_config_path):
     )
 
     # Define optimization objective
-    target_class = "Eyeglasses"
+    target_class = "Smiling"
     cls_id = CelebAttrDataset.cls_to_id[target_class]
     print(f"Target class '{target_class}' has id {cls_id}")
-    l2_lambda = riem_config.get("l2_lambda", 0.05)
+    l2_lambda = riem_config.get("l2_lambda", 0.1)
     opt_fn = get_opt_fn(cls_model, cls_id, latent_shape, x0_flat_normalized, l2_lambda)
 
     # Run the riemannian optimizer
@@ -150,7 +150,7 @@ def riemannian_optimization(riem_config_path):
 
     # Visualize the optimization trajectory using the pre-denormalized latents.
     traj_save_path = os.path.join(output_dir, "trajectory.png")
-    visualize_trajectory(model, xT, denorm_trajectory, latent_shape, T_render, traj_save_path, fast_mode=False)
+    visualize_trajectory(model, xT, denorm_trajectory, latent_shape, T_render, traj_save_path, fast_mode=True)
 
 def main():
     mp.set_start_method("spawn", force=True)
