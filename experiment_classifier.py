@@ -329,46 +329,38 @@ def train_cls(conf: TrainConfig, gpus):
         dirpath=f'{conf.logdir}',
         save_last=True,
         save_top_k=1,
-        # every_n_train_steps=conf.save_every_samples //
-        # conf.batch_size_effective,
     )
     checkpoint_path = f'{conf.logdir}/last.ckpt'
     if os.path.exists(checkpoint_path):
         resume = checkpoint_path
     else:
         if conf.continue_from is not None:
-            # continue from a checkpoint
             resume = conf.continue_from.path
         else:
             resume = None
 
-    tb_logger = pl_loggers.TensorBoardLogger(save_dir=conf.logdir,
-                                             name=None,
-                                             version='')
-
-    # from pytorch_lightning.
+    tb_logger = pl_loggers.TensorBoardLogger(
+        save_dir=conf.logdir,
+        name=None,
+        version=''
+    )
 
     plugins = []
-    if len(gpus) == 1:
-        accelerator = None
-    else:
-        accelerator = 'ddp'
+    accelerator = "gpu"
+    if len(gpus) > 1:
         from pytorch_lightning.plugins import DDPPlugin
-        # important for working with gradient checkpoint
         plugins.append(DDPPlugin(find_unused_parameters=False))
 
     trainer = pl.Trainer(
         max_steps=conf.total_samples // conf.batch_size_effective,
-        resume_from_checkpoint=resume,
-        gpus=gpus,
+        devices=gpus,  # use 'devices' instead of 'gpus'
         accelerator=accelerator,
         precision=16 if conf.fp16 else 32,
-        callbacks=[
-            checkpoint,
-        ],
-        replace_sampler_ddp=True,
+        callbacks=[checkpoint],
         logger=tb_logger,
         accumulate_grad_batches=conf.accum_batches,
         plugins=plugins,
     )
-    trainer.fit(model)
+    # Pass the resume checkpoint as ckpt_path to trainer.fit()
+    trainer.fit(model, ckpt_path=resume)
+
