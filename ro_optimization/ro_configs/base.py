@@ -5,7 +5,7 @@ CONFIG = {
     # Riemannian optimization parameters
     "ro_SNR": 50, #SNR at which Riemannian optimization takes place
     "reg_lambda": 1e-5,
-    "riemannian_steps": 2,
+    "riemannian_steps": 7,
     "riemannian_lr_init": 1e-4,
     
     # Optimizer selection:
@@ -22,7 +22,7 @@ CONFIG = {
     "line_search": "strong_wolfe",
     "wolfe_c1": 1e-4,
     "wolfe_c2": 0.7,
-    "max_bracket": 5,
+    "max_bracket": 15,
     "max_zoom": 10,
     "max_alpha": 300,
     "armijo_rho": 1e-6,

@@ -106,10 +106,10 @@ def riemannian_optimization(riem_config_path):
     )
 
     # Define optimization objective
-    target_class = "Wavy_Hair"
+    target_class = "Eyeglasses"
     cls_id = CelebAttrDataset.cls_to_id[target_class]
     print(f"Target class '{target_class}' has id {cls_id}")
-    l2_lambda = riem_config.get("l2_lambda", 0.1)
+    l2_lambda = riem_config.get("l2_lambda", 0.05)
     opt_fn = get_opt_fn(cls_model, cls_id, latent_shape, x0_flat_normalized, l2_lambda)
 
     # Run the riemannian optimizer
