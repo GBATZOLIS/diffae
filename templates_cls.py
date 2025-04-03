@@ -24,8 +24,8 @@ def ffhq128_autoenc_non_linear_cls():
     conf.manipulate_mode = ManipulateMode.celebahq_all
     conf.manipulate_znormalize = True
     conf.latent_infer_path = f'checkpoints/{ffhq128_autoenc_130M().name}/latent.pkl'
-    conf.batch_size = 32
-    conf.lr = 1e-3
+    conf.batch_size = 64
+    conf.lr = 5e-4
     conf.total_samples = 300_000
     # Use the pretraining trick instead of continuing training.
     conf.pretrain = PretrainConfig(
@@ -34,8 +34,8 @@ def ffhq128_autoenc_non_linear_cls():
     )
     # Set classifier type to 'nonlinear' and define extra parameters.
     conf.classifier_type = 'nonlinear'
-    conf.non_linear_hidden_dims = [256, 128]
-    conf.non_linear_dropout = 0.25
+    conf.non_linear_hidden_dims = [256]
+    conf.non_linear_dropout = 0.1
     conf.name = 'ffhq128_autoenc_cls_nonlinear'
     return conf
 

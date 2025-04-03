@@ -24,24 +24,27 @@ class ZipLoader:
         for each in zip(*self.loaders):
             yield each
 
-class NonLinearClassifier(nn.Module):
+class FlexibleClassifier(nn.Module):
     """
-    A robust non-linear classifier built as a small MLP without using batch normalization.
-    It uses two hidden layers with LayerNorm, ReLU activations, and dropout.
+    A classifier that supports an arbitrary number of hidden layers.
+    Each hidden layer consists of a linear transformation, LayerNorm,
+    ReLU activation, and dropout. The final layer maps from the last hidden dimension
+    (or directly from the input if no hidden layer is provided) to the number of classes.
+    
+    If no hidden_dims are provided, it behaves as a linear classifier.
     """
-    def __init__(self, in_features, num_classes, hidden_dims=[256, 128], dropout=0.25):
+    def __init__(self, in_features, num_classes, hidden_dims=[], dropout=0.25):
         super().__init__()
-        self.model = nn.Sequential(
-            nn.Linear(in_features, hidden_dims[0]),
-            nn.LayerNorm(hidden_dims[0]),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dims[0], hidden_dims[1]),
-            nn.LayerNorm(hidden_dims[1]),
-            nn.ReLU(inplace=True),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dims[1], num_classes)
-        )
+        layers = []
+        prev_dim = in_features
+        for dim in hidden_dims:
+            layers.append(nn.Linear(prev_dim, dim))
+            layers.append(nn.LayerNorm(dim))
+            layers.append(nn.ReLU(inplace=True))
+            layers.append(nn.Dropout(dropout))
+            prev_dim = dim
+        layers.append(nn.Linear(prev_dim, num_classes))
+        self.model = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.model(x)
@@ -100,17 +103,17 @@ class ClsModel(pl.LightningModule):
             if classifier_type == 'linear':
                 self.classifier = nn.Linear(conf.style_ch, num_cls)
             elif classifier_type == 'nonlinear':
-                # Use extra config values for hidden dimensions and dropout.
-                hidden_dims = getattr(conf, 'non_linear_hidden_dims', [256, 128])
-                dropout = getattr(conf, 'non_linear_dropout', 0.25)
-                self.classifier = NonLinearClassifier(conf.style_ch, num_cls,
+                # Use config parameters for hidden dimensions and dropout.
+                hidden_dims = getattr(conf, 'non_linear_hidden_dims', [])
+                dropout = getattr(conf, 'non_linear_dropout', 0.2)
+                self.classifier = FlexibleClassifier(conf.style_ch, num_cls,
                                                     hidden_dims=hidden_dims,
                                                     dropout=dropout)
             else:
                 raise ValueError(f"Unknown classifier_type: {classifier_type}")
-        
         else:
             raise NotImplementedError()
+
 
         self.ema_classifier = copy.deepcopy(self.classifier)
 
@@ -300,9 +303,9 @@ class ClsModel(pl.LightningModule):
         self.log('loss_ema', loss_ema)
         return loss
 
-    def on_train_batch_end(self, outputs, batch, batch_idx: int,
-                           dataloader_idx: int) -> None:
+    def on_train_batch_end(self, outputs, batch, batch_idx: int, dataloader_idx: int = 0) -> None:
         ema(self.classifier, self.ema_classifier, self.conf.ema_decay)
+
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.classifier.parameters(),
@@ -352,7 +355,7 @@ def train_cls(conf: TrainConfig, gpus):
         plugins.append(DDPPlugin(find_unused_parameters=False))
 
     trainer = pl.Trainer(
-        max_steps=conf.total_samples // conf.batch_size_effective,
+        max_steps= 60000, #conf.total_samples // conf.batch_size_effective,
         devices=gpus,  # use 'devices' instead of 'gpus'
         accelerator=accelerator,
         precision=16 if conf.fp16 else 32,
