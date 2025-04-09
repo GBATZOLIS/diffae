@@ -5,7 +5,7 @@ if __name__ == '__main__':
     # need to first train the diffae autoencoding model & infer the latents
     # this requires only a single GPU.
     gpus = [0]
-    conf = ffhq128_autoenc_non_linear_cls()
+    conf = ffhq128_autoenc_cls_non_linear()
     train_cls(conf, gpus=gpus)
 
     # after this you can do the manipulation!

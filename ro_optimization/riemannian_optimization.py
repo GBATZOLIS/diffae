@@ -19,7 +19,7 @@ from .visualization_utils import visualize_trajectory
 
 # Import project-specific modules (unchanged)
 from templates_latent import ffhq128_autoenc_latent   # autoencoder config
-from templates_cls import ffhq128_autoenc_cls         # classifier config
+from templates_cls import ffhq128_autoenc_cls, ffhq128_autoenc_cls_non_linear         # classifier config
 from experiment import LitModel
 from experiment_classifier import ClsModel
 from dataset import ImageDataset, CelebAttrDataset
@@ -54,7 +54,7 @@ def riemannian_optimization(riem_config_path):
 
     # Load classifier model
     print("Loading classifier model ...")
-    cls_conf = ffhq128_autoenc_cls()
+    cls_conf = ffhq128_autoenc_cls_non_linear()
     cls_model = ClsModel(cls_conf)
     cls_ckpt = os.path.join("checkpoints", cls_conf.name, "last.ckpt")
     print(f"Loading classifier checkpoint from {cls_ckpt}")
@@ -106,10 +106,10 @@ def riemannian_optimization(riem_config_path):
     )
 
     # Define optimization objective
-    target_class = "Smiling"
+    target_class = "Wearing_Hat"
     cls_id = CelebAttrDataset.cls_to_id[target_class]
     print(f"Target class '{target_class}' has id {cls_id}")
-    l2_lambda = riem_config.get("l2_lambda", 0.1)
+    l2_lambda = riem_config.get("l2_lambda", 0.01)
     opt_fn = get_opt_fn(cls_model, cls_id, latent_shape, x0_flat_normalized, l2_lambda)
 
     # Run the riemannian optimizer

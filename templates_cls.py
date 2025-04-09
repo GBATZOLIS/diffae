@@ -18,7 +18,7 @@ def ffhq128_autoenc_cls():
     conf.name = 'ffhq128_autoenc_cls'
     return conf
 
-def ffhq128_autoenc_non_linear_cls():
+def ffhq128_autoenc_cls_non_linear():
     conf = ffhq128_autoenc_130M()
     conf.train_mode = TrainMode.manipulate
     conf.manipulate_mode = ManipulateMode.celebahq_all
