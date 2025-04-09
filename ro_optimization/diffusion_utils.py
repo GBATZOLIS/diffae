@@ -73,6 +73,31 @@ def get_denoiser_fn(diffusion_wrapper, latent_net, t, latent_shape):
         return (z_flat - sigma_t * noise_pred_flat) / alpha_t
     return denoiser_fn
 
+def get_classifier_fn(cls_model, t, latent_shape):
+    """
+    Constructs and returns a classifier function that, when provided with a
+    flattened latent vector x_flat, unflattens it to shape (B, *latent_shape) and
+    then computes the logits using the classifier for diffusion time t.
+    
+    Args:
+        cls_model: The classifier model. It must have a forward method that accepts
+                   two arguments: (x, t). If not time-conditioned, the model should
+                   be modified to accept an extra (optional) t.
+        t: Either a scalar or a tensor containing the diffusion time(s) at which the
+           classifier should operate.
+        latent_shape: The shape that x_flat should be reshaped to before passing to the classifier.
+        
+    Returns:
+        A function classifier_fn(x_flat) that returns the raw logits computed by the classifier.
+    """
+    def classifier_fn(x_flat):
+        # Unflatten the latent into the original shape.
+        x = unflatten_tensor(x_flat, latent_shape)
+        # Forward pass through the classifier.
+        # We assume the classifier's forward method has been modified to accept a 't' parameter.
+        return cls_model(x, t)
+    return classifier_fn
+
 def compute_discrete_time_from_target_snr(riem_config, autoenc_conf):
     """
     Computes the discrete diffusion time index from a target SNR value provided in the riemannian config.

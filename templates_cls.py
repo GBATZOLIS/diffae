@@ -1,8 +1,9 @@
 from templates import *
-
+from templates_latent import *
 
 def ffhq128_autoenc_cls():
     conf = ffhq128_autoenc_130M()
+    conf.autoenc_config = ffhq128_autoenc_latent()
     conf.train_mode = TrainMode.manipulate
     conf.manipulate_mode = ManipulateMode.celebahq_all
     conf.manipulate_znormalize = True
@@ -16,10 +17,14 @@ def ffhq128_autoenc_cls():
         f'checkpoints/{ffhq128_autoenc_130M().name}/last.ckpt',
     )
     conf.name = 'ffhq128_autoenc_cls'
+    #settings for diffusion-time dependent classifiers
+    conf.diffusion_time_dependent_classifier=False
+    conf.lower_trainable_snr = 1
     return conf
 
 def ffhq128_autoenc_non_linear_cls():
     conf = ffhq128_autoenc_130M()
+    conf.autoenc_config = ffhq128_autoenc_latent()
     conf.train_mode = TrainMode.manipulate
     conf.manipulate_mode = ManipulateMode.celebahq_all
     conf.manipulate_znormalize = True
@@ -37,6 +42,9 @@ def ffhq128_autoenc_non_linear_cls():
     conf.non_linear_hidden_dims = [256]
     conf.non_linear_dropout = 0.1
     conf.name = 'ffhq128_autoenc_cls_nonlinear'
+    #settings for diffusion-time dependent classifiers
+    conf.diffusion_time_dependent_classifier=False
+    conf.lower_trainable_snr = 1
     return conf
 
 

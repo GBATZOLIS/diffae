@@ -13,7 +13,7 @@ from argparse import ArgumentParser
 # Import helper functions from local modules
 from .config_loader import load_riemannian_config
 from .utils import flatten_tensor, unflatten_tensor
-from .diffusion_utils import DiffusionWrapper, get_score_fn, get_denoiser_fn, compute_discrete_time_from_target_snr
+from .diffusion_utils import DiffusionWrapper, get_classifier_fn, get_score_fn, get_denoiser_fn, compute_discrete_time_from_target_snr
 from .objectives import get_opt_fn
 from .visualization_utils import visualize_trajectory
 
@@ -105,12 +105,15 @@ def riemannian_optimization(riem_config_path):
         denoiser_fn=denoiser_fn
     )
 
-    # Define optimization objective
+    # Define optimization objective.
     target_class = "Smiling"
     cls_id = CelebAttrDataset.cls_to_id[target_class]
     print(f"Target class '{target_class}' has id {cls_id}")
-    l2_lambda = riem_config.get("l2_lambda", 0.1)
-    opt_fn = get_opt_fn(cls_model, cls_id, latent_shape, x0_flat_normalized, l2_lambda)
+    reg_norm_weight = riem_config.get("reg_norm_weight", 0.1)
+    reg_norm_type = riem_config.get("reg_norm_type", "L2")
+    classifier_fn = get_classifier_fn(cls_model, t_latent, latent_shape)
+    opt_fn = get_opt_fn(classifier_fn, cls_id, latent_shape, x0_flat_normalized, reg_norm_weight, reg_norm_type)
+
 
     # Run the riemannian optimizer
     print("Running riemannian optimization ...")
