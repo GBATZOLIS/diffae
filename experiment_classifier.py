@@ -30,6 +30,14 @@ def compute_discrete_time_from_target_snr(autoenc_conf, target_snr):
     desired_alpha = target_snr / (1 + target_snr)
     latent_diffusion = autoenc_conf.make_latent_eval_diffusion_conf().make_sampler()
     alphas_cumprod = latent_diffusion.alphas_cumprod  # assumed to be a numpy array
+    print("\n--- SNR for first 10 diffusion time steps ---")
+    for t in range(15):
+        alpha = alphas_cumprod[t]
+        sigma_squared = 1.0 - alpha
+        snr = alpha / sigma_squared
+        print(f"Step {t:2d}: alpha_cumprod = {alpha:.6f}, SNR = {snr:.6f}")
+    print("---------------------------------------------\n")
+
     diffs = np.abs(alphas_cumprod - desired_alpha)
     best_t = int(np.argmin(diffs))
     computed_snr = alphas_cumprod[best_t] / (1 - alphas_cumprod[best_t])
@@ -50,11 +58,37 @@ class ZipLoader:
         for each in zip(*self.loaders):
             yield each
 
+####################################
+# Classifier Modules
+####################################
 class FlexibleClassifier(nn.Module):
-    def __init__(self, in_features, num_classes, hidden_dims=[], dropout=0.25):
+    def __init__(self, in_features, num_classes, hidden_dims=[], dropout=0.25, time_embedding_dim=None):
+        """
+        A flexible classifier that supports an optional time conditioning.
+        
+        Args:
+            in_features (int): The dimensionality of the feature input.
+            num_classes (int): The number of output classes.
+            hidden_dims (list): List of hidden layer sizes.
+            dropout (float): Dropout rate.
+            time_embedding_dim (int, optional): When provided, enables time conditioning.
+        """
         super().__init__()
+        self.use_time = time_embedding_dim is not None
+        if self.use_time:
+            self.time_embedding_dim = time_embedding_dim
+            # MLP to process the raw sinusoidal time embedding.
+            self.time_embed = nn.Sequential(
+                nn.Linear(self.time_embedding_dim, self.time_embedding_dim),
+                nn.ReLU(inplace=True),
+                nn.Linear(self.time_embedding_dim, self.time_embedding_dim)
+            )
+            effective_in_features = in_features + self.time_embedding_dim
+        else:
+            effective_in_features = in_features
+
         layers = []
-        prev_dim = in_features
+        prev_dim = effective_in_features
         for dim in hidden_dims:
             layers.append(nn.Linear(prev_dim, dim))
             layers.append(nn.LayerNorm(dim))
@@ -63,8 +97,44 @@ class FlexibleClassifier(nn.Module):
             prev_dim = dim
         layers.append(nn.Linear(prev_dim, num_classes))
         self.model = nn.Sequential(*layers)
-    def forward(self, x):
+    
+    def forward(self, x, t=None):
+        if self.use_time:
+            if t is None:
+                t = torch.zeros(x.size(0), device=x.device, dtype=torch.float32)
+            t_emb = get_timestep_embedding(t, self.time_embedding_dim)
+            t_emb = self.time_embed(t_emb)
+            x = torch.cat([x, t_emb], dim=-1)
         return self.model(x)
+
+class LinearTimeDependentClassifier(nn.Module):
+    def __init__(self, in_features, num_classes, time_embedding_dim):
+        """
+        A linear classifier with time conditioning.
+        
+        Args:
+            in_features (int): Dimensionality of the feature input.
+            num_classes (int): Number of output classes.
+            time_embedding_dim (int): Dimensionality of the time embedding.
+        """
+        super().__init__()
+        self.time_embedding_dim = time_embedding_dim
+        # MLP to process the sinusoidal time embedding.
+        self.time_embed = nn.Sequential(
+            nn.Linear(time_embedding_dim, time_embedding_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(time_embedding_dim, time_embedding_dim)
+        )
+        # Linear layer that operates on the concatenated vector (feature + time_embedding)
+        self.linear = nn.Linear(in_features + time_embedding_dim, num_classes)
+    
+    def forward(self, x, t=None):
+        if t is None:
+            t = torch.zeros(x.size(0), device=x.device, dtype=torch.float32)
+        t_emb = get_timestep_embedding(t, self.time_embedding_dim)
+        t_emb = self.time_embed(t_emb)
+        x_cat = torch.cat([x, t_emb], dim=-1)
+        return self.linear(x_cat)
 
 ####################################
 # Diffusion Time–Dependent Classifier Model
@@ -117,26 +187,16 @@ class ClsModel(pl.LightningModule):
         ####################################
         self.diffusion_time_dependent = getattr(conf, 'diffusion_time_dependent_classifier', False)
         if self.diffusion_time_dependent:
-            # Set time embedding dimension and create a time-embedding MLP.
-            self.time_embedding_dim = getattr(conf, 'time_embedding_dim', 128)
-            self.time_embed = nn.Sequential(
-                nn.Linear(self.time_embedding_dim, self.time_embedding_dim),
-                nn.ReLU(),
-                nn.Linear(self.time_embedding_dim, self.time_embedding_dim)
-            )
-            # Increase the input dimension to include the time embedding.
-            input_dim = conf.style_ch + self.time_embedding_dim
-            # Expect the full autoencoder config to be provided as conf.autoenc_config.
+            # Set time embedding dimension.
+            self.time_embedding_dim = getattr(conf, 'time_embedding_dim', 64)
+            input_dim = conf.style_ch  # Do not add time dim here; classifier modules will handle it.
             self.autoenc_config = conf.autoenc_config  
-            # Precompute the latent diffusion sampler’s kernel arrays once.
+            # Precompute latent diffusion sampler’s kernel arrays.
             latent_diffusion = self.autoenc_config.make_latent_eval_diffusion_conf().make_sampler()
-            # NOTE: We rely on the diffusion object's arrays:
             self.alpha_vals = torch.tensor(latent_diffusion.sqrt_alphas_cumprod,
                                            device=torch.device("cpu"), dtype=torch.float32)
             self.sigma_vals = torch.tensor(np.sqrt(1.0 - latent_diffusion.alphas_cumprod),
                                            device=torch.device("cpu"), dtype=torch.float32)
-            # Determine the maximum diffusion time for training.
-            # If conf.lower_trainable_snr exists, use compute_discrete_time_from_target_snr to determine the corresponding discrete time.
             self.max_diffusion_time = (
                 compute_discrete_time_from_target_snr(self.autoenc_config, conf.lower_trainable_snr)
                 if getattr(conf, 'lower_trainable_snr', None) is not None 
@@ -145,18 +205,28 @@ class ClsModel(pl.LightningModule):
         else:
             input_dim = conf.style_ch
 
+        classifier_type = getattr(conf, 'classifier_type', 'linear')
         if conf.train_mode == TrainMode.manipulate:
-            classifier_type = getattr(conf, 'classifier_type', 'linear')
-            if classifier_type == 'linear':
-                self.classifier = nn.Linear(input_dim, num_cls)
-            elif classifier_type == 'nonlinear':
-                hidden_dims = getattr(conf, 'non_linear_hidden_dims', [])
-                dropout = getattr(conf, 'non_linear_dropout', 0.2)
-                self.classifier = FlexibleClassifier(input_dim, num_cls,
-                                                     hidden_dims=hidden_dims,
-                                                     dropout=dropout)
+            if self.diffusion_time_dependent:
+                if classifier_type == 'linear':
+                    # Use a dedicated linear classifier for time-dependent case.
+                    self.classifier = LinearTimeDependentClassifier(input_dim, num_cls, self.time_embedding_dim)
+                elif classifier_type == 'nonlinear':
+                    hidden_dims = getattr(conf, 'non_linear_hidden_dims', [])
+                    dropout = getattr(conf, 'non_linear_dropout', 0.2)
+                    self.classifier = FlexibleClassifier(input_dim, num_cls, hidden_dims=hidden_dims,
+                                                         dropout=dropout, time_embedding_dim=self.time_embedding_dim)
+                else:
+                    raise ValueError(f"Unknown classifier_type: {classifier_type}")
             else:
-                raise ValueError(f"Unknown classifier_type: {classifier_type}")
+                if classifier_type == 'linear':
+                    self.classifier = nn.Linear(input_dim, num_cls)
+                elif classifier_type == 'nonlinear':
+                    hidden_dims = getattr(conf, 'non_linear_hidden_dims', [])
+                    dropout = getattr(conf, 'non_linear_dropout', 0.2)
+                    self.classifier = FlexibleClassifier(input_dim, num_cls, hidden_dims=hidden_dims, dropout=dropout)
+                else:
+                    raise ValueError(f"Unknown classifier_type: {classifier_type}")
         else:
             raise NotImplementedError()
 
@@ -270,13 +340,7 @@ class ClsModel(pl.LightningModule):
     # Forward and Training Methods
     ####################################
     def forward(self, x, t=None):
-        if self.diffusion_time_dependent:
-            if t is None:
-                t = torch.zeros(x.size(0), device=x.device)
-            t_emb = get_timestep_embedding(t, self.time_embedding_dim)
-            t_emb = self.time_embed(t_emb)
-            x = torch.cat([x, t_emb], dim=-1)
-        return self.classifier(x)
+        return self.classifier(x, t=t)
 
     def training_step(self, batch, batch_idx):
         self.ema_model: BeatGANsAutoencModel
@@ -295,28 +359,25 @@ class ClsModel(pl.LightningModule):
             if self.conf.manipulate_znormalize:
                 cond = self.normalize(cond)
             if self.diffusion_time_dependent:
-                # Sample a random diffusion time between 0 and max_diffusion_time for each example.
                 t_rand = torch.randint(0, self.max_diffusion_time + 1, (cond.size(0),), device=cond.device)
-                # Instead of creating a new sampler every step, use precomputed alpha and sigma arrays:
-                # (Make sure the alpha_vals and sigma_vals tensors are on the same device as cond.)
                 alpha_vals = self.alpha_vals.to(cond.device).to(cond.dtype)
                 sigma_vals = self.sigma_vals.to(cond.device).to(cond.dtype)
                 alpha_t = alpha_vals[t_rand.long()].view(t_rand.size(0), 1)
                 sigma_t = sigma_vals[t_rand.long()].view(t_rand.size(0), 1)
                 noise = torch.randn_like(cond)
                 cond_perturbed = alpha_t * cond + sigma_t * noise
-                pred = self.classifier.forward(cond_perturbed, t=t_rand)
-                pred_ema = self.ema_classifier.forward(cond_perturbed, t=t_rand)
+                pred = self.classifier(cond_perturbed, t=t_rand)
+                pred_ema = self.ema_classifier(cond_perturbed, t=t_rand)
             else:
-                pred = self.classifier.forward(cond)
-                pred_ema = self.ema_classifier.forward(cond)
+                pred = self.classifier(cond)
+                pred_ema = self.ema_classifier(cond)
         elif self.conf.train_mode == TrainMode.manipulate_img:
-            pred = self.classifier.forward(imgs)
+            pred = self.classifier(imgs)
             pred_ema = None
         elif self.conf.train_mode == TrainMode.manipulate_imgt:
             t, weight = self.T_sampler.sample(len(imgs), imgs.device)
             imgs_t = self.sampler.q_sample(imgs, t)
-            pred = self.classifier.forward(imgs_t, t=t)
+            pred = self.classifier(imgs_t, t=t)
             pred_ema = None
             print('pred:', pred.shape)
         else:

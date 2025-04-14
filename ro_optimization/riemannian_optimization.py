@@ -15,11 +15,11 @@ from .config_loader import load_riemannian_config
 from .utils import flatten_tensor, unflatten_tensor
 from .diffusion_utils import DiffusionWrapper, get_classifier_fn, get_score_fn, get_denoiser_fn, compute_discrete_time_from_target_snr
 from .objectives import get_opt_fn
-from .visualization_utils import visualize_trajectory
+from .visualization_utils import visualize_trajectory, save_gif_from_rendered_images
 
 # Import project-specific modules (unchanged)
 from templates_latent import ffhq128_autoenc_latent   # autoencoder config
-from templates_cls import ffhq128_autoenc_cls         # classifier config
+from templates_cls import ffhq128_autoenc_cls, ffhq128_autoenc_non_linear_cls, ffhq128_autoenc_non_linear_time_cls         # classifier config
 from experiment import LitModel
 from experiment_classifier import ClsModel
 from dataset import ImageDataset, CelebAttrDataset
@@ -27,7 +27,7 @@ from dataset import ImageDataset, CelebAttrDataset
 # Riemannian optimization & geometry library (external)
 from data_geometry.optim_function import get_optim_function
 from data_geometry.riemannian_optimization.retraction import create_retraction_fn
-from data_geometry.riemannian_optimization.optimizers import get_riemannian_optimizer
+from data_geometry.riemannian_optimization import get_riemannian_optimizer
 
 def riemannian_optimization(riem_config_path):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -54,7 +54,7 @@ def riemannian_optimization(riem_config_path):
 
     # Load classifier model
     print("Loading classifier model ...")
-    cls_conf = ffhq128_autoenc_cls()
+    cls_conf = ffhq128_autoenc_non_linear_cls()
     cls_model = ClsModel(cls_conf)
     cls_ckpt = os.path.join("checkpoints", cls_conf.name, "last.ckpt")
     print(f"Loading classifier checkpoint from {cls_ckpt}")
@@ -67,7 +67,9 @@ def riemannian_optimization(riem_config_path):
     print("Loading data sample ...")
     data = ImageDataset("imgs_align", image_size=autoenc_conf.img_size,
                         exts=["jpg", "JPG", "png"], do_augment=False)
-    batch = data[0]["img"][None]
+    
+    L = 9  # or any number you want
+    batch = data[0]["img"].unsqueeze(0).repeat(L, 1, 1, 1)  # shape: (L, C, H, W)
     batch = batch.to(device)
 
     cond = model.encode(batch)
@@ -85,7 +87,7 @@ def riemannian_optimization(riem_config_path):
 
     t_val = compute_discrete_time_from_target_snr(riem_config, autoenc_conf)
     batch_size = x0_flat_normalized.size(0)
-    t_latent = torch.full((batch_size,), t_val, dtype=torch.float32, device=device)
+    t_latent = torch.full((1,), t_val, dtype=torch.float32, device=device)
 
     # Build latent diffusion process & wrapper
     print("Building latent diffusion process ...")
@@ -109,9 +111,9 @@ def riemannian_optimization(riem_config_path):
     target_class = "Smiling"
     cls_id = CelebAttrDataset.cls_to_id[target_class]
     print(f"Target class '{target_class}' has id {cls_id}")
-    reg_norm_weight = riem_config.get("reg_norm_weight", 0.1)
+    reg_norm_weight = riem_config.get("reg_norm_weight", 0.5)
     reg_norm_type = riem_config.get("reg_norm_type", "L2")
-    classifier_fn = get_classifier_fn(cls_model, t_latent, latent_shape)
+    classifier_fn = get_classifier_fn(cls_model, torch.zeros_like(t_latent), latent_shape)
     opt_fn = get_opt_fn(classifier_fn, cls_id, latent_shape, x0_flat_normalized, reg_norm_weight, reg_norm_type)
 
 
@@ -134,7 +136,7 @@ def riemannian_optimization(riem_config_path):
     manipulated_img = (manipulated_img + 1) / 2.0
 
     # Save results
-    output_dir = "ro_optimization/ro_results"
+    output_dir = riem_config.get('log_dir', 'logs')
     os.makedirs(output_dir, exist_ok=True)
     original_img = model.render(xT, cond, T=T_render)
     original_img = (original_img + 1) / 2.0
@@ -154,6 +156,14 @@ def riemannian_optimization(riem_config_path):
     # Visualize the optimization trajectory using the pre-denormalized latents.
     traj_save_path = os.path.join(output_dir, "trajectory.png")
     visualize_trajectory(model, xT, denorm_trajectory, latent_shape, T_render, traj_save_path, fast_mode=True)
+
+    rendered_images = visualize_trajectory(
+    model, xT, denorm_trajectory, latent_shape, T_render, traj_save_path, fast_mode=True
+    )
+
+    gif_path = os.path.join(output_dir, "trajectory.gif")
+    save_gif_from_rendered_images(rendered_images, gif_path, duration_sec=6)
+
 
 def main():
     mp.set_start_method("spawn", force=True)

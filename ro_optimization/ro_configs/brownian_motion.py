@@ -3,13 +3,28 @@ CONFIG = {
     "random_seed": 42,
 
     # Riemannian optimization parameters
-    "ro_SNR": 50, #SNR at which Riemannian optimization takes place
+    "ro_SNR": 20, #SNR at which Riemannian optimization takes place
     "reg_lambda": 1e-5,
-    "riemannian_steps": 6,
+    "riemannian_steps": 10,
     "riemannian_lr_init": 5e-3,
     
     # Optimizer selection:
-    "optimizer_type": "gradient_descent",  # Choices:["gradient_descent", "trust_region"]
+    "optimizer_type": "brownian_dynamics",  # Choices:["gradient_descent", "trust_region", "brownian_dynamics"]
+
+    # Brownian Motion (Itô SDE) parameters (added)
+    "dt": 0.01,
+    "noise_scale": 1.0,
+    "diffusion_approx": "lanczos",  # Choose between "chebyshev" or "lanczos"
+    
+    # Lanczos solver settings (added)
+    "lanczos_max_iter": 25,
+    "lanczos_iter_logdet": 25,
+    "lanczos_tol": 1e-7,
+    "lanczos_reorth": True,
+
+    # Chebyshev solver settings (added)
+    "chebyshev_order": 20,
+    "chebyshev_bound_iter": 10,
 
     # Trust-region parameters
     "trust_region_delta0": 0.1,
@@ -42,6 +57,6 @@ CONFIG = {
     "cg_max_iter": 20,
 
     # Logging
-    "log_dir": "ro_optimization/ro_results/optimization",
-    "plot_filename": "combined_plot.png",
+    "log_dir": "ro_optimization/ro_results/brownian_motion",
+    "plot_filename": "brownian_motion.png",
 }
