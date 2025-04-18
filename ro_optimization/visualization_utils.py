@@ -5,7 +5,11 @@ from .utils import unflatten_tensor
 import imageio
 import math
 
-def visualize_trajectory(model, xT, trajectory, latent_shape, T_render, save_path, fast_mode=False):
+
+def visualize_trajectory(
+    model, xT, trajectory, latent_shape, T_render,
+    save_path=None, fast_mode=False
+):
     """
     Visualizes the optimization trajectory by rendering images at each optimization step.
     Also returns the rendered images for optional gif creation.
@@ -23,7 +27,10 @@ def visualize_trajectory(model, xT, trajectory, latent_shape, T_render, save_pat
             imgs_np = imgs.cpu().permute(0, 2, 3, 1).numpy()  # (B, H, W, 3)
             rendered_images.append(imgs_np)
     else:
-        all_latents = torch.cat([unflatten_tensor(latent, latent_shape) for latent in trajectory], dim=0)
+        all_latents = torch.cat(
+            [unflatten_tensor(latent, latent_shape) for latent in trajectory],
+            dim=0
+        )
         xT_repeated = xT.repeat(n_steps, 1, 1, 1)
         imgs = model.render(xT_repeated, all_latents, T=T_render)
         imgs = (imgs + 1) / 2.0
@@ -32,7 +39,10 @@ def visualize_trajectory(model, xT, trajectory, latent_shape, T_render, save_pat
         rendered_images = list(imgs_np)
 
     # Plot grid
-    fig, axes = plt.subplots(batch_size, n_steps, figsize=(n_steps * 3, batch_size * 3))
+    fig, axes = plt.subplots(
+        batch_size, n_steps,
+        figsize=(n_steps * 3, batch_size * 3)
+    )
     if batch_size == 1 and n_steps == 1:
         axes = np.array([[axes]])
     elif batch_size == 1:
@@ -49,11 +59,11 @@ def visualize_trajectory(model, xT, trajectory, latent_shape, T_render, save_pat
                 ax.set_title(f"Step {j}")
 
     plt.tight_layout()
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close()
 
     return rendered_images  # shape: [n_steps][batch_size][H][W][3]
-
 
 
 def save_gif_from_rendered_images(rendered_images, gif_path, duration_sec=15):
@@ -84,9 +94,9 @@ def save_gif_from_rendered_images(rendered_images, gif_path, duration_sec=15):
         grid_rows_list = []
         for r in range(grid_rows):
             row_imgs = padded_imgs[r * grid_cols:(r + 1) * grid_cols]
-            row = np.concatenate(row_imgs, axis=1)  # concat horizontally
+            row = np.concatenate(row_imgs, axis=1)
             grid_rows_list.append(row)
-        frame = np.concatenate(grid_rows_list, axis=0)  # concat vertically
+        frame = np.concatenate(grid_rows_list, axis=0)
 
         frame = (frame * 255).astype(np.uint8)
         frames.append(frame)

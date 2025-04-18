@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-def get_opt_fn(classifier_fn, cls_id, latent_shape, x0_flat, reg_norm_weight=0.1, reg_norm_type="L2"):
+def get_opt_fn(classifier_fn, cls_id, latent_shape, x0_flat, classifier_weight=1., reg_norm_weight=0.1, reg_norm_type="L2"):
     """
     Returns an optimization objective function that combines a classifier loss evaluated
     at a specific diffusion time (via classifier_fn) with a regularization term that can be either L2 or L1.
@@ -29,5 +29,5 @@ def get_opt_fn(classifier_fn, cls_id, latent_shape, x0_flat, reg_norm_weight=0.1
             reg_loss = F.l1_loss(x_flat, x0_flat, reduction='none').sum(dim=1)
         else:
             raise ValueError(f"Unknown norm type: {reg_norm_type}. Use 'L2' or 'L1'.")
-        return cls_loss + reg_norm_weight * reg_loss
+        return classifier_weight * cls_loss + reg_norm_weight * reg_loss
     return opt_fn

@@ -202,6 +202,7 @@ class ClsModel(pl.LightningModule):
                 if getattr(conf, 'lower_trainable_snr', None) is not None 
                 else 1000
             )
+            print(f'LOWEST TRAINABLE SNR AT DIFFUSION TIME: {self.max_diffusion_time}')
         else:
             input_dim = conf.style_ch
 

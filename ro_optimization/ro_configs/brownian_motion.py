@@ -5,11 +5,16 @@ CONFIG = {
     # Riemannian optimization parameters
     "ro_SNR": 20, #SNR at which Riemannian optimization takes place
     "reg_lambda": 1e-5,
-    "riemannian_steps": 10,
+    "riemannian_steps": 8,
     "riemannian_lr_init": 5e-3,
     
     # Optimizer selection:
-    "optimizer_type": "brownian_dynamics",  # Choices:["gradient_descent", "trust_region", "brownian_dynamics"]
+    "optimizer_type": "RiemannianULA",  # Choices:["gradient_descent", "trust_region", "brownian_dynamics"]
+
+    # Optimization function
+    "classifier_weight": 10,
+    "reg_norm_weight": 0.3,
+    "reg_norm_type": "L2",
 
     # Brownian Motion (Itô SDE) parameters (added)
     "dt": 0.01,
@@ -17,8 +22,8 @@ CONFIG = {
     "diffusion_approx": "lanczos",  # Choose between "chebyshev" or "lanczos"
     
     # Lanczos solver settings (added)
-    "lanczos_max_iter": 25,
-    "lanczos_iter_logdet": 25,
+    "lanczos_max_iter": 20,
+    "lanczos_iter_logdet": 20,
     "lanczos_tol": 1e-7,
     "lanczos_reorth": True,
 

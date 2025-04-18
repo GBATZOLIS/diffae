@@ -3,13 +3,18 @@ CONFIG = {
     "random_seed": 42,
 
     # Riemannian optimization parameters
-    "ro_SNR": 50, #SNR at which Riemannian optimization takes place
+    "ro_SNR": 124, #SNR at which Riemannian optimization takes place
     "reg_lambda": 1e-5,
-    "riemannian_steps": 6,
+    "riemannian_steps": 10,
     "riemannian_lr_init": 5e-3,
     
     # Optimizer selection:
     "optimizer_type": "gradient_descent",  # Choices:["gradient_descent", "trust_region"]
+
+    # Optimization function
+    "classifier_weight": 1.,
+    "reg_norm_weight": 0.25,
+    "reg_norm_type": "L2",
 
     # Trust-region parameters
     "trust_region_delta0": 0.1,
